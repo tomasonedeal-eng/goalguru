@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useApp } from "@/context/app-context";
 import { createClient } from "@/lib/supabase/client";
@@ -9,7 +8,14 @@ import { createClient } from "@/lib/supabase/client";
 type Mode = "login" | "signup";
 
 export function LoginForm() {
-  const { user, ready, authConfigured } = useApp();
+  const {
+    user,
+    ready,
+    authConfigured,
+    loginLocalGoogle,
+    loginLocalEmail,
+    signupLocal,
+  } = useApp();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [mode, setMode] = useState<Mode>("login");
@@ -32,123 +38,109 @@ export function LoginForm() {
   }, [user, ready, router]);
 
   const handleGoogle = async () => {
-    if (!authConfigured) return;
     setError(null);
     setLoading(true);
 
-    const supabase = createClient();
-    const { error: oauthError } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
+    if (authConfigured) {
+      const supabase = createClient();
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
 
-    if (oauthError) {
-      setError(oauthError.message);
-      setLoading(false);
+      if (oauthError) {
+        setError(oauthError.message);
+        setLoading(false);
+      }
+      return;
     }
+
+    const name =
+      displayName.trim() ||
+      window.prompt("Tavo vardas lyderių lentelėje:", "Google žaidėjas")?.trim() ||
+      "Google žaidėjas";
+
+    loginLocalGoogle(name, email.trim() || undefined);
+    router.push("/");
   };
 
   const handleEmail = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!authConfigured) return;
-
     setError(null);
     setMessage(null);
     setLoading(true);
 
-    const supabase = createClient();
+    if (authConfigured) {
+      const supabase = createClient();
 
-    if (mode === "signup") {
-      if (!displayName.trim()) {
-        setError("Įveskite slapyvardį.");
+      if (mode === "signup") {
+        if (!displayName.trim()) {
+          setError("Įveskite slapyvardį.");
+          setLoading(false);
+          return;
+        }
+
+        const { error: signUpError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: { display_name: displayName.trim() },
+            emailRedirectTo: `${window.location.origin}/auth/callback`,
+          },
+        });
+
+        if (signUpError) {
+          setError(signUpError.message);
+          setLoading(false);
+          return;
+        }
+
+        setMessage("Patikrinkite el. paštą — išsiuntėme patvirtinimo nuorodą.");
         setLoading(false);
         return;
       }
 
-      const { error: signUpError } = await supabase.auth.signUp({
+      const { error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
-        options: {
-          data: { display_name: displayName.trim() },
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-        },
       });
 
-      if (signUpError) {
-        setError(signUpError.message);
+      if (signInError) {
+        setError(signInError.message);
         setLoading(false);
         return;
       }
 
-      setMessage("Patikrinkite el. paštą — išsiuntėme patvirtinimo nuorodą.");
-      setLoading(false);
+      router.push("/");
+      router.refresh();
       return;
     }
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (signInError) {
-      setError(signInError.message);
-      setLoading(false);
-      return;
+    if (mode === "signup") {
+      const err = signupLocal(displayName, email, password);
+      if (err) {
+        setError(err);
+        setLoading(false);
+        return;
+      }
+    } else {
+      const err = loginLocalEmail(email, password);
+      if (err) {
+        setError(err);
+        setLoading(false);
+        return;
+      }
     }
 
     router.push("/");
-    router.refresh();
   };
 
   if (!ready) {
     return (
       <div className="mx-auto max-w-md py-20 text-center text-slate-400">
         Kraunama...
-      </div>
-    );
-  }
-
-  if (!authConfigured) {
-    return (
-      <div className="mx-auto max-w-lg space-y-6">
-        <h1 className="text-3xl font-bold text-white">Supabase reikalingas</h1>
-        <div className="card space-y-4 text-sm text-slate-300">
-          <p>Norint naudoti tikrą prisijungimą (Google + el. paštas), sukurk Supabase projektą:</p>
-          <ol className="list-decimal space-y-2 pl-5">
-            <li>
-              Eik į{" "}
-              <a
-                href="https://supabase.com/dashboard"
-                className="text-emerald-400 underline"
-                target="_blank"
-                rel="noreferrer"
-              >
-                supabase.com
-              </a>{" "}
-              → New project
-            </li>
-            <li>
-              Nukopijuok <code className="text-amber-300">.env.example</code> →{" "}
-              <code className="text-amber-300">.env.local</code> ir įrašyk URL + anon key
-            </li>
-            <li>
-              SQL Editor → paleisk <code className="text-amber-300">supabase/schema.sql</code>
-            </li>
-            <li>
-              Authentication → Providers → įjunk <strong>Google</strong>
-            </li>
-            <li>
-              Authentication → URL Configuration → Redirect URLs:{" "}
-              <code className="text-amber-300">http://localhost:3000/auth/callback</code>
-            </li>
-          </ol>
-          <p className="text-slate-500">Perkrauk serverį po .env.local sukūrimo.</p>
-        </div>
-        <Link href="/" className="btn-secondary inline-block">
-          ← Atgal
-        </Link>
       </div>
     );
   }
@@ -172,7 +164,7 @@ export function LoginForm() {
           className="flex w-full items-center justify-center gap-3 rounded-2xl border border-white/10 bg-white py-3 font-medium text-slate-900 hover:bg-slate-100 disabled:opacity-60"
         >
           <GoogleIcon />
-          Prisijungti su Google
+          {loading ? "Jungiamasi..." : "Prisijungti su Google"}
         </button>
 
         <div className="flex items-center gap-3 text-xs text-slate-500">
@@ -259,6 +251,12 @@ export function LoginForm() {
 
       <p className="text-center text-xs text-slate-500">
         Tik žaidimo taškai — jokių pinigų.
+        {!authConfigured && (
+          <>
+            <br />
+            Vietinis režimas — pridėk .env.local Supabase tikram Google OAuth.
+          </>
+        )}
       </p>
     </div>
   );

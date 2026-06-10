@@ -13,7 +13,14 @@ import { generateId } from "@/lib/id";
 import { estimatePoolOdds } from "@/lib/odds";
 import { fetchProfile, updateProfile } from "@/lib/profiles";
 import { isMatchLocked, settleBet } from "@/lib/scoring";
-import { loadBets, loadMatches, saveBets, saveMatches } from "@/lib/storage";
+import {
+  localGoogleSignIn,
+  localSignIn,
+  localSignUp,
+  loadLocalUser,
+  saveLocalUser,
+} from "@/lib/local-auth";
+import { demoLeaderboard, loadBets, loadMatches, saveBets, saveMatches } from "@/lib/storage";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import type { Bet, LeaderboardEntry, Match, OddsMode, Outcome, User } from "@/lib/types";
 
@@ -24,6 +31,9 @@ interface AppContextValue {
   ready: boolean;
   authConfigured: boolean;
   logout: () => Promise<void>;
+  loginLocalGoogle: (displayName: string, email?: string) => void;
+  loginLocalEmail: (email: string, password: string) => string | null;
+  signupLocal: (displayName: string, email: string, password: string) => string | null;
   refreshProfile: () => Promise<void>;
   placeBet: (matchId: string, outcome: Outcome, stake: number, oddsMode: OddsMode) => string | null;
   updateMatchResult: (matchId: string, homeScore: number, awayScore: number) => void;
@@ -69,6 +79,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const syncSession = useCallback(async () => {
     if (!supabase) {
+      const localUser = loadLocalUser();
+      if (localUser) {
+        setUser(localUser);
+        setBets(loadBets(localUser.id));
+      }
       setReady(true);
       return;
     }
@@ -145,10 +160,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     if (supabase) {
       await supabase.auth.signOut();
+    } else {
+      saveLocalUser(null);
     }
     setUser(null);
     setBets([]);
   }, [supabase]);
+
+  const loginLocalGoogle = useCallback((displayName: string, email?: string) => {
+    const loggedIn = localGoogleSignIn(displayName, email);
+    setUser(loggedIn);
+    setBets(loadBets(loggedIn.id));
+  }, []);
+
+  const loginLocalEmail = useCallback((email: string, password: string) => {
+    const result = localSignIn(email, password);
+    if (result.error) return result.error;
+    if (result.user) {
+      setUser(result.user);
+      setBets(loadBets(result.user.id));
+    }
+    return null;
+  }, []);
+
+  const signupLocal = useCallback(
+    (displayName: string, email: string, password: string) => {
+      const result = localSignUp(displayName, email, password);
+      if (result.error) return result.error;
+      if (result.user) {
+        setUser(result.user);
+        setBets([]);
+      }
+      return null;
+    },
+    [],
+  );
 
   const getUserBet = useCallback(
     (matchId: string) => bets.find((b) => b.userId === user?.id && b.matchId === matchId),
@@ -214,7 +260,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const newBalance = user.coinBalance - stake;
 
       setBets((prev) => [...prev, bet]);
-      setUser((prev) => (prev ? { ...prev, coinBalance: newBalance } : prev));
+      setUser((prev) => {
+        if (!prev) return prev;
+        const updated = { ...prev, coinBalance: newBalance };
+        if (!supabase) saveLocalUser(updated);
+        return updated;
+      });
 
       if (supabase) {
         void updateProfile(supabase, user.id, { coin_balance: newBalance });
@@ -258,9 +309,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         if (pointsDelta > 0 && user) {
           const newPoints = user.totalPoints + pointsDelta;
-          setUser((current) =>
-            current ? { ...current, totalPoints: newPoints } : current,
-          );
+          setUser((current) => {
+            if (!current) return current;
+            const updated = { ...current, totalPoints: newPoints };
+            if (!supabase) saveLocalUser(updated);
+            return updated;
+          });
           if (supabase) {
             void updateProfile(supabase, user.id, { total_points: newPoints });
             void loadLeaderboard();
@@ -274,23 +328,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const leaderboard = useMemo(() => {
-    const entries = remoteLeaderboard.map((entry) => ({
-      ...entry,
-      isCurrentUser: entry.id === user?.id,
-    }));
+    const base: LeaderboardEntry[] = authConfigured
+      ? remoteLeaderboard.map((entry) => ({
+          ...entry,
+          isCurrentUser: entry.id === user?.id,
+        }))
+      : demoLeaderboard.map((entry) => ({ ...entry }));
 
-    if (user && !entries.find((e) => e.id === user.id)) {
-      entries.push({
+    if (user && !base.find((e) => e.id === user.id)) {
+      base.push({
         id: user.id,
         displayName: user.displayName,
         totalPoints: user.totalPoints,
         betsCount: bets.filter((b) => b.userId === user.id).length,
         isCurrentUser: true,
       });
+    } else if (user) {
+      const entry = base.find((e) => e.id === user.id);
+      if (entry) {
+        entry.totalPoints = user.totalPoints;
+        entry.betsCount = bets.filter((b) => b.userId === user.id).length;
+        entry.isCurrentUser = true;
+      }
     }
 
-    return entries.sort((a, b) => b.totalPoints - a.totalPoints);
-  }, [bets, remoteLeaderboard, user]);
+    return base.sort((a, b) => b.totalPoints - a.totalPoints);
+  }, [authConfigured, bets, remoteLeaderboard, user]);
 
   const value: AppContextValue = {
     user,
@@ -299,6 +362,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ready,
     authConfigured,
     logout,
+    loginLocalGoogle,
+    loginLocalEmail,
+    signupLocal,
     refreshProfile,
     placeBet,
     updateMatchResult,

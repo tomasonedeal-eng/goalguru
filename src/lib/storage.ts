@@ -8,6 +8,14 @@ const KEYS = {
 
 export const STARTING_COINS = 1000;
 
+export const demoLeaderboard = [
+  { id: "demo-1", displayName: "FutboloKaralius", totalPoints: 420, betsCount: 12 },
+  { id: "demo-2", displayName: "Spėjikas99", totalPoints: 385, betsCount: 8 },
+  { id: "demo-3", displayName: "Ofsidas", totalPoints: 310, betsCount: 15 },
+  { id: "demo-4", displayName: "VAR_Master", totalPoints: 275, betsCount: 6 },
+  { id: "demo-5", displayName: "Golass", totalPoints: 240, betsCount: 10 },
+];
+
 function readJson<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
   try {
