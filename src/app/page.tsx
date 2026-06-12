@@ -25,11 +25,11 @@ export default function HomePage() {
             FIFA World Cup 2026
           </p>
           <h1 className="text-4xl font-bold leading-tight text-white md:text-5xl">
-            Spėk. Statyk monetas. Kilk reitinge.
+            Spėk. Rinkkis koeficientą. Kilk reitinge.
           </h1>
           <p className="text-lg text-slate-400">
-            Viešas totalizatorius su fiksuotais ir dinaminiais koeficientais.
-            Renkiesi rungtynes ir statymo sumą — tik virtualūs taškai, jokių pinigų.
+            Viešas totalizatorius su fiksuotais koeficientais.
+            Spėk kiekvieno mačo rezultatą — tik virtualūs taškai, jokių pinigų.
           </p>
           <div className="flex flex-wrap gap-3">
             <Link href="/fixtures" className="btn-primary">
@@ -45,8 +45,8 @@ export default function HomePage() {
           <StatCard label="Iki turnyro" value={`${daysLeft} d.`} />
           <StatCard label="Rungtynių" value={`${matches.length}`} />
           <StatCard
-            label="Tavo monetos"
-            value={user ? String(user.coinBalance) : "—"}
+            label="Tavo taškai"
+            value={user ? String(user.totalPoints) : "—"}
             accent
           />
         </div>
@@ -99,7 +99,7 @@ export default function HomePage() {
           {!user && (
             <div className="card border-dashed border-emerald-400/30 text-center">
               <p className="mb-3 text-sm text-slate-400">
-                Prisijunk ir gauk 1000 monetų turnyrui
+                Prisijunk ir pradėk spėti rungtynes
               </p>
               <Link href="/login" className="btn-primary inline-block">
                 Prisijungti

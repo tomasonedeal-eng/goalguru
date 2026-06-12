@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useApp } from "@/context/app-context";
 import { teamMap } from "@/data/teams";
 import { isMatchLocked } from "@/lib/scoring";
-import type { Match, OddsMode, Outcome } from "@/lib/types";
+import type { Match, Outcome } from "@/lib/types";
 import { TeamFlag } from "@/components/team-flag";
 
 const outcomeLabels: Record<Outcome, string> = {
@@ -14,16 +14,13 @@ const outcomeLabels: Record<Outcome, string> = {
 };
 
 export function BetSheet({ match, onClose }: { match: Match; onClose: () => void }) {
-  const { user, placeBet, getUserBet, getPoolOdds } = useApp();
+  const { user, placeBet, getUserBet } = useApp();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
-  const [stake, setStake] = useState(10);
-  const [oddsMode, setOddsMode] = useState<OddsMode>(user?.defaultOddsMode ?? "fixed");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
   const existingBet = getUserBet(match.id);
   const locked = isMatchLocked(match);
-  const poolOdds = getPoolOdds(match);
   const home = teamMap[match.homeTeamId];
   const away = teamMap[match.awayTeamId];
 
@@ -32,7 +29,7 @@ export function BetSheet({ match, onClose }: { match: Match; onClose: () => void
       setError("Pasirinkite rezultatą.");
       return;
     }
-    const err = placeBet(match.id, outcome, stake, oddsMode);
+    const err = placeBet(match.id, outcome, 1, "fixed");
     if (err) {
       setError(err);
       return;
@@ -45,10 +42,17 @@ export function BetSheet({ match, onClose }: { match: Match; onClose: () => void
     return (
       <Overlay onClose={onClose}>
         <div className="space-y-4 text-center">
-          <p className="text-lg font-semibold text-white">Jau statei</p>
+          <p className="text-lg font-semibold text-white">Tavo spėjimas</p>
+          <p className="text-4xl font-bold text-amber-300">
+            {outcomeLabels[existingBet.outcome]}
+          </p>
           <p className="text-slate-400">
-            {outcomeLabels[existingBet.outcome]} · {existingBet.stake} monetų ·{" "}
-            {existingBet.coefficient}x · {existingBet.oddsMode === "fixed" ? "Fiksuoti" : "Dinaminiai"}
+            koeficientas ×{existingBet.coefficient}
+            {existingBet.settled && (
+              <span className={existingBet.pointsWon > 0 ? " text-emerald-400" : " text-slate-500"}>
+                {" "}· {existingBet.pointsWon > 0 ? `+${existingBet.pointsWon} tšk.` : "Nepasisekė"}
+              </span>
+            )}
           </p>
           <button onClick={onClose} className="btn-secondary w-full">
             Uždaryti
@@ -74,28 +78,11 @@ export function BetSheet({ match, onClose }: { match: Match; onClose: () => void
           </span>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <ModeButton
-            active={oddsMode === "fixed"}
-            onClick={() => setOddsMode("fixed")}
-            label="Fiksuoti"
-            hint="Koef. fiksuotas"
-          />
-          <ModeButton
-            active={oddsMode === "pool"}
-            onClick={() => setOddsMode("pool")}
-            label="Dinaminiai"
-            hint="Pagal pool"
-          />
-        </div>
+        <p className="text-sm text-slate-400">Pasirinkite rezultatą:</p>
 
         <div className="grid grid-cols-3 gap-2">
           {(["home", "draw", "away"] as Outcome[]).map((key) => {
-            const fixed = match.odds[key];
-            const pool = poolOdds[key];
-            const coeff = oddsMode === "fixed" ? fixed : pool;
-            const label =
-              key === "home" ? "1" : key === "draw" ? "X" : "2";
+            const label = key === "home" ? "1" : key === "draw" ? "X" : "2";
             const teamLabel =
               key === "home" ? home.nameLt : key === "away" ? away.nameLt : "Lygiosios";
 
@@ -104,73 +91,29 @@ export function BetSheet({ match, onClose }: { match: Match; onClose: () => void
                 key={key}
                 disabled={locked}
                 onClick={() => setOutcome(key)}
-                className={`rounded-2xl border p-3 text-left transition ${
+                className={`rounded-2xl border p-4 text-center transition ${
                   outcome === key
                     ? "border-emerald-400 bg-emerald-500/10"
                     : "border-white/10 bg-white/5 hover:border-white/20"
                 }`}
               >
-                <p className="text-xs text-slate-400">{label} · {teamLabel}</p>
-                <p className="mt-1 text-xl font-bold text-amber-300">{coeff}x</p>
-                {oddsMode === "pool" && (
-                  <p className="text-[10px] text-slate-500">fiksuoti: {fixed}x</p>
-                )}
+                <p className="text-2xl font-bold text-white">{label}</p>
+                <p className="mt-1 text-lg font-semibold text-amber-300">×{match.odds[key]}</p>
+                <p className="mt-1 text-[11px] text-slate-400">{teamLabel}</p>
               </button>
             );
           })}
         </div>
 
-        <div>
-          <label className="mb-2 block text-sm text-slate-400">
-            Statymas (monetos) — likutis: {user?.coinBalance ?? 0}
-          </label>
-          <div className="flex gap-2">
-            {[5, 10, 25, 50].map((amount) => (
-              <button
-                key={amount}
-                onClick={() => setStake(amount)}
-                className={`flex-1 rounded-xl py-2 text-sm font-medium ${
-                  stake === amount
-                    ? "bg-amber-400 text-slate-950"
-                    : "bg-white/5 text-slate-300"
-                }`}
-              >
-                {amount}
-              </button>
-            ))}
-          </div>
-          <input
-            type="number"
-            min={1}
-            max={user?.coinBalance ?? 1000}
-            value={stake}
-            onChange={(e) => setStake(Number(e.target.value))}
-            className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-emerald-400"
-          />
-        </div>
-
-        {outcome && (
-          <p className="rounded-xl bg-white/5 px-4 py-3 text-sm text-slate-300">
-            Galimas laimėjimas:{" "}
-            <span className="font-bold text-emerald-300">
-              {Math.round(
-                stake *
-                  (oddsMode === "fixed" ? match.odds[outcome] : poolOdds[outcome]),
-              )}{" "}
-              taškų
-            </span>
-          </p>
-        )}
-
         {error && <p className="text-sm text-rose-400">{error}</p>}
-        {success && <p className="text-sm text-emerald-400">Statymas priimtas!</p>}
+        {success && <p className="text-sm text-emerald-400">Spėjimas priimtas!</p>}
 
         <button
           disabled={locked || !user}
           onClick={handleSubmit}
           className="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {!user ? "Prisijunkite" : locked ? "Užrakinta" : "Statyti"}
+          {!user ? "Prisijunkite" : locked ? "Užrakinta" : "Patvirtinti spėjimą"}
         </button>
 
         <p className="text-center text-[11px] text-slate-500">
@@ -181,31 +124,6 @@ export function BetSheet({ match, onClose }: { match: Match; onClose: () => void
   );
 }
 
-function ModeButton({
-  active,
-  onClick,
-  label,
-  hint,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-  hint: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`rounded-2xl border px-3 py-3 text-left ${
-        active
-          ? "border-cyan-400 bg-cyan-500/10"
-          : "border-white/10 bg-white/5"
-      }`}
-    >
-      <p className="font-semibold text-white">{label}</p>
-      <p className="text-xs text-slate-400">{hint}</p>
-    </button>
-  );
-}
 
 function Overlay({
   children,

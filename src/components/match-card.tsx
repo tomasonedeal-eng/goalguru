@@ -56,12 +56,11 @@ export function MatchCard({ match }: { match: Match }) {
         <div className="mt-5 flex items-center justify-between gap-3">
           {bet ? (
             <p className="text-sm text-emerald-300">
-              Tavo statymas: {bet.outcome === "home" ? "1" : bet.outcome === "draw" ? "X" : "2"} ·{" "}
-              {bet.stake} monetų · {bet.coefficient}x
+              Spėjimas: {bet.outcome === "home" ? "1" : bet.outcome === "draw" ? "X" : "2"} ·{" "}
+              ×{bet.coefficient}
               {bet.settled && (
                 <span className={bet.pointsWon > 0 ? " text-emerald-400" : " text-slate-500"}>
-                  {" "}
-                  → {bet.pointsWon > 0 ? `+${bet.pointsWon} tšk.` : "0 tšk."}
+                  {" "}→ {bet.pointsWon > 0 ? `+${bet.pointsWon} tšk.` : "Nepasisekė"}
                 </span>
               )}
             </p>

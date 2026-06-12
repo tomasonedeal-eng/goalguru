@@ -58,7 +58,7 @@ export function Header() {
               <div className="hidden text-right sm:block">
                 <p className="text-xs text-slate-400">{user.displayName}</p>
                 <p className="text-sm font-semibold text-amber-300">
-                  {user.coinBalance} monetų · {user.totalPoints} tšk.
+                  {user.totalPoints} tšk.
                 </p>
               </div>
               <button

@@ -20,7 +20,7 @@ export default function FixturesPage() {
       <div>
         <h1 className="text-3xl font-bold text-white">Rungtynės</h1>
         <p className="mt-2 text-slate-400">
-          Pasirink rungtynes ir statyk monetas — fiksuotais ar dinaminiais koeficientais.
+          Pasirink rungtynes ir spėk rezultatą pagal koeficientus.
         </p>
       </div>
 

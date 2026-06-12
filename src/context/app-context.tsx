@@ -77,6 +77,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     );
   }, [supabase]);
 
+  const loadBetsFromDB = useCallback(
+    async (userId: string): Promise<Bet[]> => {
+      if (!supabase) return [];
+      const { data } = await supabase
+        .from("bets")
+        .select("*")
+        .eq("player_id", userId)
+        .order("created_at", { ascending: true });
+      if (!data) return [];
+      return data.map((row) => ({
+        id: row.id,
+        matchId: row.match_id,
+        userId: row.player_id,
+        outcome: row.outcome as import("@/lib/types").Outcome,
+        stake: row.stake,
+        oddsMode: row.odds_mode as import("@/lib/types").OddsMode,
+        coefficient: Number(row.coefficient),
+        createdAt: row.created_at,
+        settled: row.settled,
+        pointsWon: row.points_won,
+      }));
+    },
+    [supabase],
+  );
+
   const syncSession = useCallback(async () => {
     if (!supabase) {
       const localUser = loadLocalUser();
@@ -108,12 +133,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     if (profile) {
       setUser(profile);
-      setBets(loadBets(profile.id));
+      const dbBets = await loadBetsFromDB(profile.id);
+      setBets(dbBets);
     }
 
     await loadLeaderboard();
     setReady(true);
-  }, [supabase, loadLeaderboard]);
+  }, [supabase, loadLeaderboard, loadBetsFromDB]);
 
   useEffect(() => {
     setMatches(loadMatches());
@@ -136,9 +162,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [matches, ready]);
 
   useEffect(() => {
-    if (!ready || !user) return;
+    if (!ready || !user || authConfigured) return;
     saveBets(user.id, bets);
-  }, [bets, user, ready]);
+  }, [bets, user, ready, authConfigured]);
 
   const refreshProfile = useCallback(async () => {
     if (!supabase) return;
@@ -268,6 +294,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (supabase) {
+        void supabase.from("bets").insert({
+          id: bet.id,
+          player_id: user.id,
+          match_id: matchId,
+          outcome,
+          stake,
+          odds_mode: oddsMode,
+          coefficient,
+        });
         void updateProfile(supabase, user.id, { coin_balance: newBalance });
       }
 
@@ -317,14 +352,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           });
           if (supabase) {
             void updateProfile(supabase, user.id, { total_points: newPoints });
-            void loadLeaderboard();
           }
         }
 
         return updated;
       });
+
+      // Settle all players' bets in DB and refresh leaderboard
+      if (supabase) {
+        void fetch("/api/admin/settle-match", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ matchId, homeScore, awayScore }),
+        }).then(async (res) => {
+          if (res.ok) {
+            void loadLeaderboard();
+            if (user) {
+              const dbBets = await loadBetsFromDB(user.id);
+              setBets(dbBets);
+            }
+          }
+        });
+      }
     },
-    [loadLeaderboard, matches, supabase, user],
+    [loadBetsFromDB, loadLeaderboard, matches, supabase, user],
   );
 
   const leaderboard = useMemo(() => {

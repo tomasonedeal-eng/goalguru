@@ -102,20 +102,38 @@ export function LoginForm() {
         return;
       }
 
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      try {
+        const emailLookupRes = await fetch(
+          `/api/auth/lookup-email?name=${encodeURIComponent(displayName.trim())}`
+        );
 
-      if (signInError) {
-        setError(signInError.message);
+        if (!emailLookupRes.ok) {
+          setError("Žaidėjas nerastas. Patikrinkite slapyvardį.");
+          setLoading(false);
+          return;
+        }
+
+        const { email: foundEmail } = await emailLookupRes.json();
+
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: foundEmail,
+          password,
+        });
+
+        if (signInError) {
+          setError(signInError.message);
+          setLoading(false);
+          return;
+        }
+
+        router.push("/");
+        router.refresh();
+        return;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Prisijungimas nepavyko.");
         setLoading(false);
         return;
       }
-
-      router.push("/");
-      router.refresh();
-      return;
     }
 
     if (mode === "signup") {
@@ -195,29 +213,31 @@ export function LoginForm() {
         </div>
 
         <form onSubmit={handleEmail} className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-sm text-slate-400">
+              {mode === "login" ? "Tavo vardas" : "Slapyvardis"}
+            </label>
+            <input
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder={mode === "login" ? "Vardas iš registracijos" : "Tavo vardas reitinge"}
+              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-emerald-400"
+              required
+            />
+          </div>
           {mode === "signup" && (
             <div>
-              <label className="mb-1.5 block text-sm text-slate-400">Slapyvardis</label>
+              <label className="mb-1.5 block text-sm text-slate-400">El. paštas</label>
               <input
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Tavo vardas reitinge"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="tavo@email.com"
                 className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-emerald-400"
                 required
               />
             </div>
           )}
-          <div>
-            <label className="mb-1.5 block text-sm text-slate-400">El. paštas</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="tavo@email.com"
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-emerald-400"
-              required
-            />
-          </div>
           <div>
             <label className="mb-1.5 block text-sm text-slate-400">Slaptažodis</label>
             <input
