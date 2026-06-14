@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useApp } from "@/context/app-context";
 import { createClient } from "@/lib/supabase/client";
 
-type Mode = "login" | "signup";
+type Mode = "login" | "signup" | "forgot";
 
 export function LoginForm() {
   const {
@@ -155,6 +155,42 @@ export function LoginForm() {
     router.push("/");
   };
 
+  const handleForgot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setMessage(null);
+    setLoading(true);
+
+    try {
+      const res = await fetch(
+        `/api/auth/lookup-email?name=${encodeURIComponent(displayName.trim())}`
+      );
+      if (!res.ok) {
+        setError("Žaidėjas nerastas. Patikrinkite vardą.");
+        setLoading(false);
+        return;
+      }
+      const { email: foundEmail } = await res.json();
+
+      const supabase = createClient();
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(foundEmail, {
+        redirectTo: `${window.location.origin}/auth/callback?next=/update-password`,
+      });
+
+      if (resetError) {
+        setError(resetError.message);
+        setLoading(false);
+        return;
+      }
+
+      setMessage("Slaptažodžio keitimo nuoroda išsiųsta el. paštu.");
+    } catch {
+      setError("Klaida siunčiant nuorodą.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (!ready) {
     return (
       <div className="mx-auto max-w-md py-20 text-center text-slate-400">
@@ -167,7 +203,7 @@ export function LoginForm() {
     <div className="mx-auto max-w-md space-y-8">
       <div className="text-center">
         <h1 className="text-3xl font-bold text-white">
-          {mode === "login" ? "Prisijungti" : "Registruotis"}
+          {mode === "forgot" ? "Atkurti slaptažodį" : mode === "login" ? "Prisijungti" : "Registruotis"}
         </h1>
         <p className="mt-2 text-slate-400">
           Gauk 1000 virtualių monetų ir pradėk statyti
@@ -194,16 +230,16 @@ export function LoginForm() {
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
-            onClick={() => setMode("login")}
+            onClick={() => { setMode("login"); setError(null); setMessage(null); }}
             className={`rounded-xl py-2 text-sm font-medium ${
-              mode === "login" ? "bg-emerald-500 text-slate-950" : "bg-white/5 text-slate-400"
+              mode === "login" || mode === "forgot" ? "bg-emerald-500 text-slate-950" : "bg-white/5 text-slate-400"
             }`}
           >
             Prisijungti
           </button>
           <button
             type="button"
-            onClick={() => setMode("signup")}
+            onClick={() => { setMode("signup"); setError(null); setMessage(null); }}
             className={`rounded-xl py-2 text-sm font-medium ${
               mode === "signup" ? "bg-emerald-500 text-slate-950" : "bg-white/5 text-slate-400"
             }`}
@@ -212,6 +248,30 @@ export function LoginForm() {
           </button>
         </div>
 
+        {mode === "forgot" ? (
+          <form onSubmit={handleForgot} className="space-y-4">
+            <div>
+              <label className="mb-1.5 block text-sm text-slate-400">Tavo vardas</label>
+              <input
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="Vardas iš registracijos"
+                className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-emerald-400"
+                required
+              />
+            </div>
+            <button type="submit" disabled={loading} className="btn-primary w-full disabled:opacity-60">
+              {loading ? "Siunčiama..." : "Siųsti nuorodą"}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMode("login"); setError(null); setMessage(null); }}
+              className="w-full text-sm text-slate-400 hover:text-white"
+            >
+              ← Grįžti
+            </button>
+          </form>
+        ) : (
         <form onSubmit={handleEmail} className="space-y-4">
           <div>
             <label className="mb-1.5 block text-sm text-slate-400">
@@ -257,7 +317,17 @@ export function LoginForm() {
                 ? "Prisijungti"
                 : "Sukurti paskyrą"}
           </button>
+          {mode === "login" && authConfigured && (
+            <button
+              type="button"
+              onClick={() => { setMode("forgot"); setError(null); setMessage(null); }}
+              className="w-full text-sm text-slate-400 hover:text-white text-center"
+            >
+              Pamiršote slaptažodį?
+            </button>
+          )}
         </form>
+        )}
 
         {error && (
           <p className="rounded-xl bg-rose-500/10 px-4 py-3 text-sm text-rose-300">{error}</p>

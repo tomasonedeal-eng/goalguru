@@ -61,6 +61,12 @@ export function Header() {
                   {user.totalPoints} tšk.
                 </p>
               </div>
+              <Link
+                href="/profile"
+                className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/5"
+              >
+                Paskyra
+              </Link>
               <button
                 onClick={handleLogout}
                 className="rounded-full border border-white/10 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/5"

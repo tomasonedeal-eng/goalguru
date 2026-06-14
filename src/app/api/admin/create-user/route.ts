@@ -22,10 +22,14 @@ function slugifyName(name: string): string {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { displayName } = body;
+    const { displayName, password: providedPassword } = body;
 
     if (!displayName || typeof displayName !== "string" || !displayName.trim()) {
       return NextResponse.json({ error: "Display name is required" }, { status: 400 });
+    }
+
+    if (providedPassword && providedPassword.length < 8) {
+      return NextResponse.json({ error: "Password must be at least 8 characters" }, { status: 400 });
     }
 
     const serverClient = await createServerClient();
@@ -47,7 +51,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 });
     }
 
-    const tempPassword = generateTempPassword();
+    const tempPassword = providedPassword || generateTempPassword();
     const slugName = slugifyName(displayName.trim());
     const randomSuffix = Math.random().toString(36).slice(2, 7);
     const generatedEmail = `player-${slugName}-${randomSuffix}@goalguru.local`;
