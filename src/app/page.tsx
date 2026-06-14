@@ -21,9 +21,16 @@ export default function HomePage() {
     <div className="space-y-10">
       <section className="hero-glow relative overflow-hidden rounded-3xl border border-white/10 bg-[#0d1628]/80 p-8 md:p-12">
         <div className="relative z-10 max-w-2xl space-y-5">
-          <p className="inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium uppercase tracking-widest text-emerald-300">
-            FIFA World Cup 2026
-          </p>
+          <div className="flex items-center gap-4">
+            <p className="inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium uppercase tracking-widest text-emerald-300">
+              FIFA World Cup 2026
+            </p>
+            {user && (
+              <p className="text-base text-slate-300">
+                Sveiki, <span className="font-semibold text-white">{user.displayName}</span> 👋
+              </p>
+            )}
+          </div>
           <h1 className="text-4xl font-bold leading-tight text-white md:text-5xl">
             Spėk. Rinkkis koeficientą. Kilk reitinge.
           </h1>
