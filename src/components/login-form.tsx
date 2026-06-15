@@ -103,20 +103,20 @@ export function LoginForm() {
       }
 
       try {
-        const emailLookupRes = await fetch(
-          `/api/auth/lookup-email?name=${encodeURIComponent(displayName.trim())}`
-        );
+        const { data: profileData, error: profileError } = await supabase
+          .from("profiles")
+          .select("email")
+          .eq("display_name", displayName.trim())
+          .single();
 
-        if (!emailLookupRes.ok) {
+        if (profileError || !profileData) {
           setError("Žaidėjas nerastas. Patikrinkite slapyvardį.");
           setLoading(false);
           return;
         }
 
-        const { email: foundEmail } = await emailLookupRes.json();
-
         const { error: signInError } = await supabase.auth.signInWithPassword({
-          email: foundEmail,
+          email: profileData.email,
           password,
         });
 
@@ -162,18 +162,8 @@ export function LoginForm() {
     setLoading(true);
 
     try {
-      const res = await fetch(
-        `/api/auth/lookup-email?name=${encodeURIComponent(displayName.trim())}`
-      );
-      if (!res.ok) {
-        setError("Žaidėjas nerastas. Patikrinkite vardą.");
-        setLoading(false);
-        return;
-      }
-      const { email: foundEmail } = await res.json();
-
       const supabase = createClient();
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(foundEmail, {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
         redirectTo: `${window.location.origin}/auth/callback?next=/update-password`,
       });
 
@@ -251,11 +241,12 @@ export function LoginForm() {
         {mode === "forgot" ? (
           <form onSubmit={handleForgot} className="space-y-4">
             <div>
-              <label className="mb-1.5 block text-sm text-slate-400">Tavo vardas</label>
+              <label className="mb-1.5 block text-sm text-slate-400">El. paštas</label>
               <input
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Vardas iš registracijos"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="tavo@email.com"
                 className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-emerald-400"
                 required
               />
