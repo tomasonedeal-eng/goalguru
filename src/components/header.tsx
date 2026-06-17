@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useApp } from "@/context/app-context";
 
 const links = [
@@ -12,10 +12,12 @@ const links = [
 
 export function Header() {
   const pathname = usePathname();
+  const router = useRouter();
   const { user, logout } = useApp();
 
-  const handleLogout = () => {
-    void logout();
+  const handleLogout = async () => {
+    await logout();
+    router.push("/");
   };
 
   return (

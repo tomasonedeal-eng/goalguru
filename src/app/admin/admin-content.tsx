@@ -20,6 +20,12 @@ interface PlayerOption {
   coinBalance?: number;
 }
 
+interface QrLoginResult {
+  playerId: string;
+  displayName: string;
+  loginUrl: string;
+}
+
 function resolveTeamsFromMatchId(matchId: string): { homeTeamId: string; awayTeamId: string } | null {
   const prefixMatch = matchId.match(/^wc26-[^-]+-md\d+-(.+)$/);
   if (!prefixMatch) return null;
@@ -58,6 +64,8 @@ export default function AdminContent() {
   const [resetPassword, setResetPassword] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
   const [resetResult, setResetResult] = useState<{ playerId: string; msg: string; error: boolean } | null>(null);
+  const [qrLoadingPlayerId, setQrLoadingPlayerId] = useState<string | null>(null);
+  const [qrResult, setQrResult] = useState<QrLoginResult | null>(null);
 
   // --- Place bet for player ---
   const [players, setPlayers] = useState<PlayerOption[]>([]);
@@ -230,6 +238,38 @@ export default function AdminContent() {
     setResetResult({ playerId, msg: res.ok ? "✓ Slaptažodis pakeistas" : data.error || "Klaida", error: !res.ok });
     setResetLoading(false);
     if (res.ok) { setResetPlayerId(null); setResetPassword(""); }
+  };
+
+  const handleGenerateQrLogin = async (playerId: string) => {
+    setQrLoadingPlayerId(playerId);
+    setQrResult(null);
+    const res = await fetch("/api/admin/login-qr", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setQrResult({
+        playerId,
+        displayName: "Klaida",
+        loginUrl: "",
+      });
+      setResetResult({
+        playerId,
+        msg: data.error || "Nepavyko sugeneruoti QR prisijungimo.",
+        error: true,
+      });
+      setQrLoadingPlayerId(null);
+      return;
+    }
+    setResetResult(null);
+    setQrResult({
+      playerId,
+      displayName: data.displayName,
+      loginUrl: data.loginUrl,
+    });
+    setQrLoadingPlayerId(null);
   };
 
   const handleInlineBet = async (playerId: string) => {
@@ -544,14 +584,62 @@ export default function AdminContent() {
                                 setBetsPlayerId(null);
                                 setResetPlayerId(null);
                                 setInlineResult(null);
+                                setQrResult(null);
                               }}
                               className="rounded-lg bg-white/5 px-3 py-1 text-xs text-slate-300 hover:bg-emerald-500/20 hover:text-emerald-300"
                             >
                               {isOpen ? "Uždaryti" : "Statyti"}
                             </button>
+                            <button
+                              type="button"
+                              onClick={() => handleGenerateQrLogin(p.id)}
+                              className="rounded-lg bg-white/5 px-3 py-1 text-xs text-slate-300 hover:bg-cyan-500/20 hover:text-cyan-300"
+                            >
+                              {qrLoadingPlayerId === p.id ? "..." : "QR login"}
+                            </button>
                           </div>
                         </td>
                       </tr>
+                      {qrResult?.playerId === p.id && qrResult.loginUrl && (
+                        <tr className="border-b border-white/5 bg-white/[0.02]">
+                          <td colSpan={4} className="px-4 py-4">
+                            <div className="space-y-3">
+                              <p className="text-xs text-slate-400">
+                                QR prisijungimas — <span className="text-white">{qrResult.displayName}</span>
+                              </p>
+                              <div className="flex flex-wrap items-center gap-4">
+                                <img
+                                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrResult.loginUrl)}`}
+                                  alt={`QR login ${qrResult.displayName}`}
+                                  width={140}
+                                  height={140}
+                                  className="rounded-xl border border-white/10 bg-white p-2"
+                                />
+                                <div className="space-y-2">
+                                  <a
+                                    href={qrResult.loginUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-block rounded-lg bg-cyan-500/20 px-3 py-1.5 text-xs text-cyan-300 hover:bg-cyan-500/30"
+                                  >
+                                    Atidaryti prisijungimo nuorodą
+                                  </a>
+                                  <button
+                                    type="button"
+                                    onClick={() => navigator.clipboard.writeText(qrResult.loginUrl)}
+                                    className="block rounded-lg bg-white/5 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/10"
+                                  >
+                                    Kopijuoti nuorodą
+                                  </button>
+                                  <p className="max-w-xs text-[11px] text-slate-500">
+                                    Saugumo pastaba: kas nuskenuoja šį QR, tas prisijungia kaip šis žaidėjas.
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
                       {isOpen && (
                         <tr className="border-b border-white/5 bg-white/[0.03]">
                           <td colSpan={4} className="px-4 py-4">

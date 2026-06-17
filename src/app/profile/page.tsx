@@ -6,9 +6,11 @@ import { useApp } from "@/context/app-context";
 import { useRouter } from "next/navigation";
 import { PasswordInput } from "@/components/password-input";
 import { checkPasswordStrength } from "@/lib/password";
+import { displayTeamName } from "@/lib/team-resolve";
+import { teamMap } from "@/data/teams";
 
 export default function ProfilePage() {
-  const { user, ready } = useApp();
+  const { user, ready, bets, matches } = useApp();
   const router = useRouter();
 
   const [currentPassword, setCurrentPassword] = useState("");
@@ -23,6 +25,9 @@ export default function ProfilePage() {
 
   const strength = newPassword ? checkPasswordStrength(newPassword) : null;
   const isWeak = strength && strength.label === "weak";
+  const userBets = bets
+    .filter((b) => b.userId === user.id)
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,6 +117,51 @@ export default function ProfilePage() {
             {loading ? "Keičiama..." : "Pakeisti slaptažodį"}
           </button>
         </form>
+      </div>
+
+      <div>
+        <h2 className="mb-4 text-lg font-semibold text-white">Mano statymai</h2>
+        <div className="card space-y-3">
+          {userBets.length === 0 ? (
+            <p className="text-sm text-slate-400">Kol kas neturi statymų.</p>
+          ) : (
+            userBets.map((bet) => {
+              const match = matches.find((m) => m.id === bet.matchId);
+              const outcomeText = match
+                ? bet.outcome === "home"
+                  ? `${displayTeamName(match.homeTeamId, teamMap)} laimės`
+                  : bet.outcome === "away"
+                    ? `${displayTeamName(match.awayTeamId, teamMap)} laimės`
+                    : "Lygios"
+                : bet.outcome === "home"
+                  ? "Namai laimės"
+                  : bet.outcome === "away"
+                    ? "Svečiai laimės"
+                    : "Lygios";
+
+              return (
+                <div
+                  key={bet.id}
+                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm"
+                >
+                  <p className="font-medium text-white">
+                    {match
+                      ? `${displayTeamName(match.homeTeamId, teamMap)} vs ${displayTeamName(match.awayTeamId, teamMap)}`
+                      : bet.matchId}
+                  </p>
+                  <p className="mt-1 text-slate-300">
+                    Spėjimas: {outcomeText} · Koef.: ×{bet.coefficient}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {bet.settled
+                      ? `Baigta · Taškai: ${bet.pointsWon}`
+                      : "Laukia rungtynių rezultato"}
+                  </p>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
     </div>
   );
