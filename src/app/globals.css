@@ -73,3 +73,45 @@ body {
   opacity: 0.5;
   z-index: -1;
 }
+
+/* Modern dark scrollbar for scrollable admin lists */
+.custom-scroll {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.75) rgba(15, 23, 42, 0.2);
+}
+
+.custom-scroll::-webkit-scrollbar {
+  width: 12px;
+}
+
+.custom-scroll::-webkit-scrollbar-track {
+  border-radius: 9999px;
+  background: rgba(15, 23, 42, 0.22);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.12);
+}
+
+.custom-scroll::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  border: 2px solid rgba(15, 23, 42, 0.4);
+  background-clip: padding-box;
+  background: linear-gradient(180deg, rgba(148, 163, 184, 0.95), rgba(100, 116, 139, 0.9));
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.custom-scroll::-webkit-scrollbar-thumb:hover {
+  border-color: rgba(15, 23, 42, 0.25);
+  background: linear-gradient(180deg, rgba(226, 232, 240, 0.98), rgba(148, 163, 184, 0.95));
+}
+
+/* Remove spinner arrows from number inputs where needed */
+.no-spin {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.no-spin::-webkit-outer-spin-button,
+.no-spin::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}

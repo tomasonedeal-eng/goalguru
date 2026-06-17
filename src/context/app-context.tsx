@@ -57,6 +57,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [authConfigured],
   );
 
+  const syncLiveOdds = useCallback(async () => {
+    try {
+      const res = await fetch("/api/odds/live", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        odds?: Record<string, { home: number; draw: number; away: number }>;
+      };
+      const odds = data.odds ?? {};
+      const ids = new Set(Object.keys(odds));
+      if (ids.size === 0) return;
+
+      setMatches((prev) =>
+        prev.map((m) => {
+          const live = odds[m.id];
+          if (!live) return m;
+          return { ...m, odds: live };
+        }),
+      );
+    } catch {
+      // keep fallback internal odds silently
+    }
+  }, []);
+
   const loadLeaderboard = useCallback(async () => {
     if (!supabase) return;
     const { data } = await supabase
@@ -155,6 +178,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     return () => subscription.unsubscribe();
   }, [supabase, syncSession]);
+
+  useEffect(() => {
+    void syncLiveOdds();
+    const interval = window.setInterval(() => {
+      void syncLiveOdds();
+    }, 5 * 60 * 1000);
+    return () => window.clearInterval(interval);
+  }, [syncLiveOdds]);
 
   useEffect(() => {
     if (!ready) return;

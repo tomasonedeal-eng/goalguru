@@ -27,8 +27,8 @@ export async function POST(request: Request) {
 
   if (!serviceRoleKey || !supabaseUrl) {
     return NextResponse.json(
-      { error: "SUPABASE_SERVICE_ROLE_KEY missing in .env.local — required to reset player passwords" },
-      { status: 500 }
+      { error: "Negalima pakeisti slaptažodžio: trūksta SUPABASE_SERVICE_ROLE_KEY (.env.local)." },
+      { status: 400 }
     );
   }
 

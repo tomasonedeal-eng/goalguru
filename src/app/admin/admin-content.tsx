@@ -5,6 +5,8 @@ import { teamMap } from "@/data/teams";
 import { useApp } from "@/context/app-context";
 import type { Outcome } from "@/lib/types";
 import { PasswordInput } from "@/components/password-input";
+import { displayTeamName } from "@/lib/team-resolve";
+import { TeamFlag } from "@/components/team-flag";
 
 interface CreatedUser {
   userId: string;
@@ -16,6 +18,22 @@ interface PlayerOption {
   id: string;
   displayName: string;
   coinBalance?: number;
+}
+
+function resolveTeamsFromMatchId(matchId: string): { homeTeamId: string; awayTeamId: string } | null {
+  const prefixMatch = matchId.match(/^wc26-[^-]+-md\d+-(.+)$/);
+  if (!prefixMatch) return null;
+  const tail = prefixMatch[1];
+  const teamIds = Object.keys(teamMap).sort((a, b) => b.length - a.length);
+  for (const homeId of teamIds) {
+    const marker = `${homeId}-`;
+    if (!tail.startsWith(marker)) continue;
+    const awayId = tail.slice(marker.length);
+    if (teamMap[awayId]) {
+      return { homeTeamId: homeId, awayTeamId: awayId };
+    }
+  }
+  return null;
 }
 
 const OUTCOME_LABELS: Record<Outcome, string> = {
@@ -44,8 +62,10 @@ export default function AdminContent() {
   // --- Place bet for player ---
   const [players, setPlayers] = useState<PlayerOption[]>([]);
   const [betPlayerId, setBetPlayerId] = useState("");
-  const [betMatchId, setBetMatchId] = useState(matches[0]?.id ?? "");
-  const [betOutcome, setBetOutcome] = useState<Outcome>("home");
+  const [betMatchId, setBetMatchId] = useState("");
+  const [betOutcome, setBetOutcome] = useState<Outcome | null>(null);
+  const [betHomeGuess, setBetHomeGuess] = useState("");
+  const [betAwayGuess, setBetAwayGuess] = useState("");
   const [betLoading, setBetLoading] = useState(false);
   const [betError, setBetError] = useState<string | null>(null);
   const [betSuccess, setBetSuccess] = useState<string | null>(null);
@@ -98,13 +118,6 @@ export default function AdminContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Keep betMatchId valid when matches list loads
-  useEffect(() => {
-    if (!betMatchId && scheduledMatches.length > 0) {
-      setBetMatchId(scheduledMatches[0].id);
-    }
-  }, [betMatchId, scheduledMatches]);
-
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreateError(null);
@@ -153,7 +166,28 @@ export default function AdminContent() {
       return;
     }
 
-    const coefficient = betMatch.odds[betOutcome];
+    const hasCustomScore = betHomeGuess !== "" || betAwayGuess !== "";
+    if (hasCustomScore && (betHomeGuess === "" || betAwayGuess === "")) {
+      setBetError("Įveskite abu rezultatus (pvz. 1:1).");
+      setBetLoading(false);
+      return;
+    }
+
+    if (!hasCustomScore && !betOutcome) {
+      setBetError("Pasirink spėjimą: 1, X arba 2.");
+      setBetLoading(false);
+      return;
+    }
+
+    const inferredOutcome: Outcome = hasCustomScore
+      ? Number(betHomeGuess) > Number(betAwayGuess)
+        ? "home"
+        : Number(betHomeGuess) < Number(betAwayGuess)
+          ? "away"
+          : "draw"
+      : (betOutcome as Outcome);
+
+    const coefficient = betMatch.odds[inferredOutcome];
 
     try {
       const res = await fetch("/api/admin/place-bet", {
@@ -162,7 +196,7 @@ export default function AdminContent() {
         body: JSON.stringify({
           playerId: betPlayerId,
           matchId: betMatchId,
-          outcome: betOutcome,
+          outcome: inferredOutcome,
           stake: 1,
           oddsMode: "fixed",
           coefficient,
@@ -173,9 +207,9 @@ export default function AdminContent() {
         setBetError(data.error || "Nepavyko.");
         return;
       }
-      setBetSuccess(
-        `✓ ${data.displayName}: ${OUTCOME_LABELS[betOutcome as Outcome]} (×${coefficient})`,
-      );
+      setBetSuccess("Atlikta");
+      setBetHomeGuess("");
+      setBetAwayGuess("");
       void fetchPlayers();
     } catch (err) {
       setBetError(err instanceof Error ? err.message : "Klaida");
@@ -319,7 +353,7 @@ export default function AdminContent() {
               Nėra registruotų žaidėjų.
             </div>
           ) : (
-            <form onSubmit={handlePlaceBet} className="card space-y-4">
+            <form onSubmit={handlePlaceBet} className="card flex h-[70vh] min-h-[560px] flex-col space-y-4">
               <div>
                 <label className="mb-1.5 block text-sm text-slate-400">Žaidėjas</label>
                 <select
@@ -336,45 +370,91 @@ export default function AdminContent() {
                 </select>
               </div>
 
-              <div>
-                <label className="mb-1.5 block text-sm text-slate-400">Rungtynės</label>
-                <select
-                  value={betMatchId}
-                  onChange={(e) => setBetMatchId(e.target.value)}
-                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none"
-                  required
-                >
-                  {scheduledMatches.map((m) => (
-                    <option key={m.id} value={m.id} className="bg-slate-900">
-                      {teamMap[m.homeTeamId].nameLt} vs {teamMap[m.awayTeamId].nameLt}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {betMatch && (
-                <div>
-                  <label className="mb-1.5 block text-sm text-slate-400">Rezultatas</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(["home", "draw", "away"] as Outcome[]).map((o) => (
-                      <button
-                        key={o}
-                        type="button"
-                        onClick={() => setBetOutcome(o)}
-                        className={`rounded-xl py-2.5 text-sm font-medium transition-colors ${
-                          betOutcome === o
-                            ? "bg-emerald-500 text-slate-950"
-                            : "bg-white/5 text-slate-400 hover:bg-white/10"
+              <div className="flex min-h-0 flex-1 flex-col space-y-2">
+                <label className="block text-sm text-slate-400">Rungtynės ir koeficientai</label>
+                <div className="custom-scroll h-full space-y-2 overflow-y-auto pr-1">
+                  {scheduledMatches.map((m) => {
+                    const isSelected = m.id === betMatchId;
+                    return (
+                      <div
+                        key={m.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setBetMatchId(m.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setBetMatchId(m.id);
+                          }
+                        }}
+                        className={`rounded-xl border p-2 transition-all duration-150 ${
+                          isSelected
+                            ? "border-emerald-300 bg-emerald-500/20 ring-2 ring-emerald-400/70 shadow-[0_0_0_1px_rgba(52,211,153,0.35),0_8px_24px_rgba(16,185,129,0.18)]"
+                            : "border-white/10 bg-white/5 hover:border-emerald-400/40 hover:bg-white/10 active:scale-[0.99] active:border-emerald-300/60"
                         }`}
                       >
-                        {o === "home" && `1 ×${betMatch.odds.home}`}
-                        {o === "draw" && `X ×${betMatch.odds.draw}`}
-                        {o === "away" && `2 ×${betMatch.odds.away}`}
-                      </button>
-                    ))}
-                  </div>
+                        <div className="mb-2 flex items-center justify-between gap-2 text-xs text-slate-300">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <TeamFlag teamId={m.homeTeamId} size={20} />
+                            <span className="truncate">{displayTeamName(m.homeTeamId, teamMap)}</span>
+                          </div>
+                          <span className="text-slate-500">vs</span>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <TeamFlag teamId={m.awayTeamId} size={20} />
+                            <span className="truncate">{displayTeamName(m.awayTeamId, teamMap)}</span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2">
+                          {([
+                            { key: "home", label: `1 ×${m.odds.home}` },
+                            { key: "draw", label: `X ×${m.odds.draw}` },
+                            { key: "away", label: `2 ×${m.odds.away}` },
+                          ] as { key: Outcome; label: string }[]).map((item) => (
+                            <button
+                              key={item.key}
+                              type="button"
+                              onClick={() => {
+                                setBetMatchId(m.id);
+                                setBetOutcome(item.key);
+                              }}
+                              className={`rounded-lg py-2 text-xs font-medium transition-all ${
+                                isSelected && betOutcome === item.key
+                                  ? "bg-emerald-500 text-slate-950 ring-2 ring-emerald-300 shadow-[0_0_0_1px_rgba(16,185,129,0.35)]"
+                                  : "bg-white/10 text-slate-200 hover:bg-white/20"
+                              }`}
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
+              </div>
+
+              <div>
+                <div className="grid grid-cols-3 gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    value={betHomeGuess}
+                    onChange={(e) => setBetHomeGuess(e.target.value)}
+                    placeholder="Namų"
+                    className="no-spin rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white outline-none focus:border-emerald-400"
+                  />
+                  <div className="flex items-center justify-center text-slate-400">:</div>
+                  <input
+                    type="number"
+                    min={0}
+                    value={betAwayGuess}
+                    onChange={(e) => setBetAwayGuess(e.target.value)}
+                    placeholder="Svečių"
+                    className="no-spin rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white outline-none focus:border-emerald-400"
+                  />
+                </div>
+              </div>
 
               <button
                 type="submit"
@@ -485,7 +565,7 @@ export default function AdminContent() {
                                 >
                                   {scheduledMatches.map((m) => (
                                     <option key={m.id} value={m.id} className="bg-slate-900">
-                                      {teamMap[m.homeTeamId].nameLt} vs {teamMap[m.awayTeamId].nameLt}
+                                      {displayTeamName(m.homeTeamId, teamMap)} vs {displayTeamName(m.awayTeamId, teamMap)}
                                     </option>
                                   ))}
                                 </select>
@@ -544,7 +624,7 @@ export default function AdminContent() {
                                 onClick={() => handleResetPassword(p.id)}
                                 className="btn-primary px-5 py-2 text-sm disabled:opacity-60"
                               >
-                                {resetLoading ? "..." : "Pakeisti"}
+                                {resetLoading ? "..." : "Tvirtinti"}
                               </button>
                               {resetResult?.playerId === p.id && (
                                 <p className={`text-xs ${resetResult.error ? "text-rose-400" : "text-emerald-400"}`}>
@@ -575,11 +655,34 @@ export default function AdminContent() {
                                 <tbody>
                                   {playerBets.map((b) => {
                                     const m = matches.find((x) => x.id === b.matchId);
-                                    const outcomeLabel = b.outcome === "home" ? "1" : b.outcome === "draw" ? "X" : "2";
+                                    const parsedTeams = !m ? resolveTeamsFromMatchId(b.matchId) : null;
+                                    const homeName = m
+                                      ? displayTeamName(m.homeTeamId, teamMap)
+                                      : parsedTeams
+                                        ? displayTeamName(parsedTeams.homeTeamId, teamMap)
+                                        : "Namai";
+                                    const awayName = m
+                                      ? displayTeamName(m.awayTeamId, teamMap)
+                                      : parsedTeams
+                                        ? displayTeamName(parsedTeams.awayTeamId, teamMap)
+                                        : "Svečiai";
+                                    const outcomeLabel = m
+                                      ? b.outcome === "home"
+                                        ? `${displayTeamName(m.homeTeamId, teamMap)} laimės`
+                                        : b.outcome === "away"
+                                          ? `${displayTeamName(m.awayTeamId, teamMap)} laimės`
+                                          : `${displayTeamName(m.homeTeamId, teamMap)} ir ${displayTeamName(m.awayTeamId, teamMap)} lygios`
+                                      : b.outcome === "home"
+                                        ? `${homeName} laimės`
+                                        : b.outcome === "away"
+                                          ? `${awayName} laimės`
+                                          : `${homeName} ir ${awayName} lygios`;
                                     return (
                                       <tr key={b.id} className="border-t border-white/5">
                                         <td className="py-1 pr-4 text-slate-300">
-                                          {m ? `${teamMap[m.homeTeamId].nameLt} vs ${teamMap[m.awayTeamId].nameLt}` : b.matchId}
+                                          {m
+                                            ? `${displayTeamName(m.homeTeamId, teamMap)} vs ${displayTeamName(m.awayTeamId, teamMap)}`
+                                            : b.matchId}
                                         </td>
                                         <td className="py-1 pr-4 text-white">{outcomeLabel}</td>
                                         <td className="py-1 pr-4 text-slate-400">×{b.coefficient}</td>
@@ -619,7 +722,7 @@ export default function AdminContent() {
             >
               {matches.map((match) => (
                 <option key={match.id} value={match.id} className="bg-slate-900">
-                  {teamMap[match.homeTeamId].nameLt} vs {teamMap[match.awayTeamId].nameLt}
+                  {displayTeamName(match.homeTeamId, teamMap)} vs {displayTeamName(match.awayTeamId, teamMap)}
                   {match.status === "finished" && ` (${match.homeScore}:${match.awayScore})`}
                 </option>
               ))}
